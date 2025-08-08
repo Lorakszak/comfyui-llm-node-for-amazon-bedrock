@@ -9,15 +9,16 @@ import numpy as np
 import torch
 import boto3
 import folder_paths
-import re
 
 MAX_RETRY = 2
 DEBUG_MODE = False
+DEFAULT_MODEL_ID = "amazon.nova-canvas-v1:0"
 
 # Rely on ComfyUI Paths
 comfyui_root = folder_paths.base_path
 output_directory = f"{comfyui_root}/output"
 bedrock = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
+
 
 def encode_image(image_tensor: torch.Tensor) -> str:
     """Convert ComfyUI image tensor to Base64 string"""
@@ -65,7 +66,7 @@ def parse_resolution(resolution_str: str) -> tuple:
 
 def generate_images(
     inference_params,
-    model_id="amazon.nova-canvas-v1:0",
+    model_id=DEFAULT_MODEL_ID,
     output_directory=output_directory,
 ):
 
@@ -240,7 +241,16 @@ class BedrockNovaTextImage:
                 ),
                 "control_strength": (
                     "FLOAT",
-                    {"default": 0.7, "min": 0.0, "max": 1.0, "display": "slider"},
+                    {
+                        "default": 0.7,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "display": "slider",
+                    },
+                ),
+                "model_id": (
+                    "STRING",
+                    {"default": DEFAULT_MODEL_ID, "multiline": False},
                 ),
             },
         }
@@ -262,6 +272,7 @@ class BedrockNovaTextImage:
         image=None,
         control_mode=None,
         control_strength=None,
+        model_id: str = DEFAULT_MODEL_ID,
     ):
 
         height, width = map(int, re.findall(r"\d+", resolution))
@@ -332,7 +343,7 @@ class BedrockNovaTextImage:
 
         response_body = generate_images(
             inference_params=final_params,
-            model_id="amazon.nova-canvas-v1:0",
+            model_id=model_id,
         )
 
         if not response_body.get("images"):
@@ -443,7 +454,13 @@ class BedrockNovaIpAdatper:
                         "display": "number",
                     },
                 ),
-            }
+            },
+            "optional": {
+                "model_id": (
+                    "STRING",
+                    {"default": DEFAULT_MODEL_ID, "multiline": False},
+                ),
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -461,6 +478,7 @@ class BedrockNovaIpAdatper:
         cfg_scale,
         resolution,
         seed,
+        model_id: str = DEFAULT_MODEL_ID,
     ):
 
         image = image[0] * 255.0
@@ -495,7 +513,7 @@ class BedrockNovaIpAdatper:
 
         response_body = generate_images(
             inference_params=inference_params,
-            model_id="amazon.nova-canvas-v1:0",
+            model_id=model_id,
             output_directory=output_directory,
         )
 
@@ -529,7 +547,7 @@ class BedrockNovaBackgroundPromptReplace:
                         "min": 1,
                         "max": 5,
                         "step": 1,
-                        "round": 1, 
+                        "round": 1,
                         "display": "number",
                     },
                 ),
@@ -540,7 +558,7 @@ class BedrockNovaBackgroundPromptReplace:
                         "min": 1.1,
                         "max": 10.0,
                         "step": 0.1,
-                        "round": 0.1, 
+                        "round": 0.1,
                         "display": "slider",
                     },
                 ),
@@ -551,11 +569,17 @@ class BedrockNovaBackgroundPromptReplace:
                         "min": 0,
                         "max": 858993459,
                         "step": 1,
-                        "round": 1,  
+                        "round": 1,
                         "display": "number",
                     },
                 ),
-            }
+            },
+            "optional": {
+                "model_id": (
+                    "STRING",
+                    {"default": DEFAULT_MODEL_ID, "multiline": False},
+                ),
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -563,7 +587,16 @@ class BedrockNovaBackgroundPromptReplace:
     CATEGORY = "aws"
 
     @retry(tries=MAX_RETRY)
-    def forward(self, image, prompt, mask_prompt, num_images, cfg_scale, seed):
+    def forward(
+        self,
+        image,
+        prompt,
+        mask_prompt,
+        num_images,
+        cfg_scale,
+        seed,
+        model_id: str = DEFAULT_MODEL_ID,
+    ):
         image = image[0] * 255.0
         image = Image.fromarray(image.clamp(0, 255).numpy().round().astype(np.uint8))
 
@@ -591,7 +624,8 @@ class BedrockNovaBackgroundPromptReplace:
         }
 
         response_body = generate_images(
-            inference_params=inference_params, model_id="amazon.nova-canvas-v1:0"
+            inference_params=inference_params,
+            model_id=model_id,
         )
 
         images = [
